@@ -9,6 +9,10 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "@types/node": "26.4.1",
+    "drizzle-kit": "^0.31.11",
+    "i": "^0.3.7",
+    "npm": "^12.2.2",
     "prettier": "3.9.6",
     "turbo": "^2.11.10",
     "typescript": "7.0.2"
@@ -16,5 +20,9 @@
   "packageManager": "pnpm@11.25.0",
   "engines": {
     "node": ">=24"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^4.1.0"
   }
 }

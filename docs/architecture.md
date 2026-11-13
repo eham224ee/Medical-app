@@ -1,5 +1,16 @@
 # Medico developer architecture
 
+This document is the source of truth for how the Medico monorepo is structured, how the apps talk to each other, and what environment variables, database connection rules, and operational guardrails are expected.
+
+## Documentation map
+
+- [../README.md](../README.md) — project overview and repo-level quick start.
+- [README.md](./README.md) — documentation index and reading order.
+- [../apps/backend/README.md](../apps/backend/README.md) — backend API runbook.
+- [../apps/hospital-web/README.md](../apps/hospital-web/README.md) — hospital staff workflow.
+- [../apps/master-admin/README.md](../apps/master-admin/README.md) — admin verification workflow.
+- [../apps/user-pwa/README.md](../apps/user-pwa/README.md) — patient discovery experience.
+
 ## 1. System overview
 
 Medico is a pnpm/Turborepo monorepo with one PostgreSQL database hosted by Supabase. Browser clients do not connect to PostgreSQL or Supabase Storage directly. They call the Express API; the API uses `@repo/database` for the shared Drizzle schema and database connection.
@@ -11,13 +22,13 @@ master-admin ─┘                         │
                                        └── Supabase Storage (private PDF bucket)
 ```
 
-| Workspace | Runtime responsibility |
-| --- | --- |
-| `apps/backend` | HTTP validation, staff/admin authorization, audit transactions, Supabase Storage calls |
-| `apps/hospital-web` | Hospital staff bed inventory and doctor management |
-| `apps/master-admin` | Single-admin hospital review, platform audit, and capacity analytics |
-| `apps/user-pwa` | Public hospital discovery, direct calling, doctor search, and department routing |
-| `packages/db` (`@repo/database`) | Drizzle schema, PostgreSQL connection, and browser-safe shared TypeScript contracts |
+| Workspace                        | Runtime responsibility                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| `apps/backend`                   | HTTP validation, staff/admin authorization, audit transactions, Supabase Storage calls |
+| `apps/hospital-web`              | Hospital staff bed inventory and doctor management                                     |
+| `apps/master-admin`              | Single-admin hospital review, platform audit, and capacity analytics                   |
+| `apps/user-pwa`                  | Public hospital discovery, direct calling, doctor search, and department routing       |
+| `packages/db` (`@repo/database`) | Drizzle schema, PostgreSQL connection, and browser-safe shared TypeScript contracts    |
 
 The package directory remains `packages/db`; its workspace name and import contract are `@repo/database`. Backend code imports runtime Drizzle objects from `@repo/database`. Frontend code uses type-only imports from `@repo/database/contracts`; it never imports the server connection.
 
@@ -25,16 +36,22 @@ The package directory remains `packages/db`; its workspace name and import contr
 
 `@repo/database` owns the schema for hospitals, bed inventory, doctors, staff access, admin roles, audit logs, and hospital documents. `DATABASE_URL` points to the common Supabase PostgreSQL database. All products read and write the same records through the backend.
 
-The additive migration [`0002_hospital_documents.sql`](../packages/db/drizzle/0002_hospital_documents.sql) adds `hospital_documents`:
+The ordered migrations in [`packages/db/drizzle`](../packages/db/drizzle) are:
+
+- `0000_bed_inventory_natural_key.sql` creates the core enums and tables (`hospitals`, `bed_inventory`, `doctors`, `master_admins`, and `audit_logs`) and the bed inventory natural key.
+- `0001_staff_access.sql` adds hospital-scoped staff access records.
+- `0002_hospital_documents.sql` adds `hospital_documents`.
+- `0003_staff_password.sql` renames the staff PIN hash columns to password hash columns. Existing PIN hashes cannot be converted; staff credentials must be reset.
+
+The latest migration adds:
 
 - Each row belongs to a hospital and stores a sanitized display filename, byte size, and private storage object path.
 - The database enforces a positive size no larger than 10 MiB.
 - Row-level security is enabled. Access is performed by the backend with the database connection, not by a public browser client.
-- Existing migrations `0000` and `0001` cover the bed natural key and hospital staff access.
 
-The Supabase Storage bucket defaults to `hospital-legal-documents`. On the first PDF upload, the backend creates it as private, with PDF content type and a 10 MiB object limit if it is missing. If the bucket already exists but is public, storage operations fail explicitly. The API enforces PDF MIME, the `%PDF-` signature, and the same 10 MiB limit regardless of bucket configuration. The service-role key must remain in the backend environment.
+The Supabase Storage bucket defaults to `hospital-legal-documents`. On the first PDF upload, the backend creates it as private, with PDF content type and a 10 MiB object limit if it is missing. Existing buckets must also be private and have the expected size and MIME restrictions or uploads fail explicitly. The API enforces PDF MIME, the `%PDF-` signature, and the same 10 MiB limit regardless of bucket configuration. The service-role key must remain in the backend environment.
 
-To keep SQL and Drizzle aligned, update both the schema under `packages/db/src/schema` and a new ordered SQL migration under `packages/db/drizzle` for future schema changes. Apply committed SQL migrations to the selected Supabase project before deploying API code that depends on them.
+To keep SQL and Drizzle aligned, update both the schema under `packages/db/src/schema` and a new ordered SQL migration under `packages/db/drizzle` for future schema changes. From the repository root, `pnpm exec drizzle-kit push --config packages/db/drizzle.config.ts` synchronizes the configured database. The API checks database connectivity before listening, and its readiness route returns `503` while the database is unavailable.
 
 ## 3. API conventions and data flow
 
@@ -48,14 +65,15 @@ Errors use `{ "success": false, "error": "..." }` with an HTTP status. Clients d
 
 ### Public routes
 
-| Route | Behavior |
-| --- | --- |
-| `GET /api/hospitals` | Verified hospitals and their bed inventory; used for nearest-first discovery and freshness badges |
-| `GET /api/hospitals/:id` | Verified hospital, beds, and available doctors; other statuses return not found |
-| `GET /api/hospitals/:id/beds` | Bed inventory for verified hospitals |
-| `GET /api/doctors?specialty=&hospitalId=&available=true` | Doctor directory limited to verified hospitals; includes hospital name and address |
-| `POST /api/ai/triage` | Maps symptoms to department/specialty routing only; the request field is `gender` and responses include matching verified hospitals |
-| `POST /api/hospitals/register` | Creates a pending hospital. Accepts JSON or multipart fields `name`, `address`, `latitude`, `longitude`, `hotlinePhone` and up to five `legalDocuments` PDF files |
+| Route                                                    | Behavior                                                                                                                                                          |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`                                        | Database readiness check                                                                                                                                          |
+| `GET /api/hospitals`                                     | Verified hospitals and their bed inventory; used for nearest-first discovery and freshness badges                                                                 |
+| `GET /api/hospitals/:id`                                 | Verified hospital, beds, and available doctors; other statuses return not found                                                                                   |
+| `GET /api/hospitals/:id/beds`                            | Bed inventory for verified hospitals                                                                                                                              |
+| `GET /api/doctors?specialty=&hospitalId=&available=true` | Doctor directory limited to verified hospitals; includes hospital name and address                                                                                |
+| `POST /api/ai/triage`                                    | Maps symptoms to department/specialty routing only; the request field is `gender` and responses include matching verified hospitals                               |
+| `POST /api/hospitals/register`                           | Creates a pending hospital. Accepts JSON or multipart fields `name`, `address`, `latitude`, `longitude`, `hotlinePhone` and up to five `legalDocuments` PDF files |
 
 Hospital registration uploads PDFs to Storage before committing hospital/document metadata in a database transaction. If the database transaction fails, already uploaded objects are removed. Cleanup failures are logged and surfaced for operators. A failed upload never returns a success-shaped registration response.
 
@@ -65,26 +83,26 @@ The AI route is a keyword-based department router, not a diagnostic model. Both 
 
 The admin routes are under `/api/admin` and return `Cache-Control: no-store`.
 
-| Route | Access and effect |
-| --- | --- |
-| `POST /api/admin/session` | Checks the configured single-admin username/password and issues an eight-hour signed session cookie |
-| `GET /api/admin/session` | Returns the current configured admin identity when the cookie is valid |
-| `DELETE /api/admin/session` | Clears the admin cookie |
-| `GET /api/admin/hospitals` | Returns pending registrations and legal-document metadata |
-| `PATCH /api/admin/hospitals/:id/verification` | Changes only `PENDING` hospitals to `VERIFIED` or `REJECTED`; writes a global-visible audit row in the same transaction |
-| `GET /api/admin/audit-logs?limit=50` | Latest global audit activity joined to hospital names |
-| `GET /api/admin/analytics` | Verified hospital count, available ICU/general beds, and time for the aggregate database query |
-| `GET /api/admin/hospitals/:id/documents/:documentId/url` | Creates a five-minute signed URL after verifying the admin session and document/hospital relationship |
+| Route                                                    | Access and effect                                                                                                       |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/admin/session`                                | Checks the configured single-admin username/password and issues an eight-hour signed session cookie                     |
+| `GET /api/admin/session`                                 | Returns the current configured admin identity when the cookie is valid                                                  |
+| `DELETE /api/admin/session`                              | Clears the admin cookie                                                                                                 |
+| `GET /api/admin/hospitals`                               | Returns pending registrations and legal-document metadata                                                               |
+| `PATCH /api/admin/hospitals/:id/verification`            | Changes only `PENDING` hospitals to `VERIFIED` or `REJECTED`; writes a global-visible audit row in the same transaction |
+| `GET /api/admin/audit-logs?limit=50`                     | Latest global audit activity joined to hospital names                                                                   |
+| `GET /api/admin/analytics`                               | Verified hospital count, available ICU/general beds, and time for the aggregate database query                          |
+| `GET /api/admin/hospitals/:id/documents/:documentId/url` | Creates a five-minute signed URL after verifying the admin session and document/hospital relationship                   |
 
 Admin sessions use an HttpOnly, SameSite=Strict cookie, eight-hour expiry, HMAC-SHA-256 signing, and a minimum 32-character `MASTER_ADMIN_SESSION_SECRET`. The login endpoint applies a per-process failed-login throttle. This is intentionally a single-admin MVP: configure TLS, use strong credentials, and replace the in-memory throttle and environment credential model before multi-instance or public production deployment.
 
-The admin Vite app runs independently on port 5174. It does not embed credentials or service keys. Cross-origin cookie requests use `credentials: include`; the backend CORS allowlist is configured by `CORS_ORIGINS`. A separate port is not a security control.
+The admin Vite app runs independently on port 5174. It does not embed credentials or service keys. Cross-origin admin session requests use `credentials: include`; the backend CORS allowlist is configured by `CORS_ORIGINS`. Hospital staff authenticate with the `x-staff-password` header, and the public PWA uses anonymous API requests so its public-data caching does not include authenticated requests. A separate port is not a security control.
 
 ## 4. Client applications
 
 ### Hospital operations (`apps/hospital-web`)
 
-Staff validate their hospital-specific PIN, then update bed inventory and doctor listings. `x-staff-pin` is sent only to the backend. The API verifies salted scrypt hashes from `staff_access`; actors are taken from the matched database record. Bed and doctor updates append audit entries transactionally.
+Staff sign in with their hospital ID and password, then update bed inventory and doctor listings. `x-staff-password` is sent only to the backend; the client keeps it in the current browser session. The API verifies salted scrypt hashes from `staff_access`; actors are taken from the matched database record. Bed and doctor updates append audit entries transactionally.
 
 ### Master admin (`apps/master-admin`)
 
@@ -117,21 +135,21 @@ The PWA polls hospital availability every 60 seconds only while the page is visi
 
 ## 5. Environment and local development
 
-Copy [`apps/backend/.env.example`](../apps/backend/.env.example) to `apps/backend/.env` and set values privately. The API loads its own `.env`, then falls back to `packages/db/.env` for the existing database configuration. Never commit `.env` files.
+Copy [`apps/backend/.env.example`](../apps/backend/.env.example) to `apps/backend/.env` and replace every placeholder with real project values privately. The template is not a working database or Supabase configuration. The API loads its own `.env`, then falls back to `packages/db/.env` for the existing database configuration. Never commit `.env` files.
 
 Required backend settings:
 
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | Shared Supabase PostgreSQL connection string |
-| `MASTER_ADMIN_USERNAME` | Single MVP admin username |
-| `MASTER_ADMIN_PASSWORD` | Single MVP admin password |
-| `MASTER_ADMIN_SESSION_SECRET` | HMAC signing secret, at least 32 characters |
-| `SUPABASE_URL` | Project URL used by backend Storage REST calls |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Storage credential |
+| Variable                          | Purpose                                                          |
+| --------------------------------- | ---------------------------------------------------------------- |
+| `DATABASE_URL`                    | Shared Supabase PostgreSQL connection string                     |
+| `MASTER_ADMIN_USERNAME`           | Single MVP admin username                                        |
+| `MASTER_ADMIN_PASSWORD`           | Single MVP admin password                                        |
+| `MASTER_ADMIN_SESSION_SECRET`     | HMAC signing secret, at least 32 characters                      |
+| `SUPABASE_URL`                    | Project URL used by backend Storage REST calls                   |
+| `SUPABASE_SERVICE_ROLE_KEY`       | Server-only Storage credential                                   |
 | `SUPABASE_LEGAL_DOCUMENTS_BUCKET` | Optional bucket override; defaults to `hospital-legal-documents` |
-| `CORS_ORIGINS` | Comma-separated exact browser origins allowed to call the API |
+| `CORS_ORIGINS`                    | Comma-separated exact browser origins allowed to call the API    |
 
-Client builds can set `VITE_API_BASE_URL` to override the default API base. Vite variables are public and must never contain a database or Supabase service key.
+Client builds can set `VITE_API_BASE_URL` to override the default API base. Vite variables are public and must never contain a database or Supabase service key. The admin session client uses credentialed requests; all three frontends use the backend allowlist and credential-enabled CORS.
 
 Run each app with `pnpm --filter <workspace> dev`; build all workspaces with `pnpm build`. The apps use ports 5173 (PWA), 5174 (master admin), and 5175 (hospital operations) so they can run together; the backend runs on 5000. Add deployed browser origins to `CORS_ORIGINS`.
