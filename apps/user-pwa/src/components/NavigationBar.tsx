@@ -8,10 +8,10 @@ interface NavigationBarProps {
 }
 
 const tabs: Array<{ id: AppTab; label: string; Icon: LucideIcon }> = [
-  { id: 'emergency', label: 'Emergency', Icon: Hospital },
+  { id: 'emergency', label: 'Hospitals', Icon: Hospital },
   { id: 'doctors', label: 'Doctors', Icon: Activity },
-  { id: 'ai', label: 'Triage', Icon: Bot },
-  { id: 'profile', label: 'Settings', Icon: UserRound },
+  { id: 'ai', label: 'AI Triage', Icon: Bot },
+  { id: 'profile', label: 'Profile', Icon: UserRound },
 ];
 
 export function NavigationBar({ activeTab, onChange }: NavigationBarProps) {

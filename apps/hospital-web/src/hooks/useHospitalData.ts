@@ -18,6 +18,7 @@ export interface HospitalData {
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  getAuditLogsPage: (offset: number, limit: number) => Promise<AuditLog[]>;
   updateBed: (
     bedId: string,
     operation: 'increment' | 'decrement',
@@ -63,6 +64,12 @@ export function useHospitalData(session: HospitalPanelSession): HospitalData {
       if (requestId.current === currentRequestId) setIsLoading(false);
     }
   }, [session]);
+
+  const getAuditLogsPage = useCallback(
+    (offset: number, limit: number) =>
+      hospitalApi.getAuditLogs(session.hospitalId, session, limit, offset),
+    [session],
+  );
 
   useEffect(() => {
     void refresh();
@@ -171,6 +178,7 @@ export function useHospitalData(session: HospitalPanelSession): HospitalData {
     isLoading,
     error,
     refresh,
+    getAuditLogsPage,
     updateBed,
     saveDoctor,
   };

@@ -176,7 +176,11 @@ function Dashboard({ session, onSwitchHospital }: DashboardProps) {
               isLoading={data.isLoading}
               onSave={data.saveDoctor}
             />
-            <AuditFeed entries={data.auditLogs} isLoading={data.isLoading} />
+            <AuditFeed
+              entries={data.auditLogs}
+              isLoading={data.isLoading}
+              onFetchPage={data.getAuditLogsPage}
+            />
           </div>
         </div>
         <footer className="dashboard-footer">

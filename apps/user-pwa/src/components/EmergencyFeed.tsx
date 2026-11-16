@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, Clock3, MapPin, Phone, RefreshCw } from 'lucide-react';
+import { ArrowRight, MapPin, Phone, RefreshCw, Search } from 'lucide-react';
 import { publicApi, ApiError } from '../services/api';
 import type { Coordinates, PublicHospital } from '../types';
 
@@ -36,9 +36,10 @@ function lastUpdated(hospital: PublicHospital) {
 }
 
 function freshness(timestamp: number, now: number): Freshness {
+  if (!Number.isFinite(timestamp)) return 'moderate';
   const minutes = Math.max(0, now - timestamp) / 60_000;
   if (minutes < 15) return 'fresh';
-  if (minutes < 60) return 'moderate';
+  if (minutes < 120) return 'moderate';
   return 'stale';
 }
 
@@ -55,10 +56,23 @@ function bedTotals(hospital: PublicHospital) {
       const category = bed.category.toLowerCase();
       if (category.includes('icu')) totals.icu += bed.availableCount;
       if (category.includes('general')) totals.general += bed.availableCount;
+      if (category.includes('cabin')) totals.cabin += bed.availableCount;
       return totals;
     },
-    { icu: 0, general: 0 },
+    { icu: 0, general: 0, cabin: 0 },
   );
+}
+
+function bedLabel(count: number) {
+  if (count === 0) return 'Full';
+  if (count <= 5) return '1-5';
+  return '>5';
+}
+
+function bedStatusClass(count: number) {
+  if (count === 0) return 'bed-status-full';
+  if (count <= 5) return 'bed-status-high-demand';
+  return 'bed-status-available';
 }
 
 export function EmergencyFeed({
@@ -69,6 +83,7 @@ export function EmergencyFeed({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [query, setQuery] = useState('');
 
   const refresh = useCallback(async () => {
     try {
@@ -108,6 +123,14 @@ export function EmergencyFeed({
       haversineDistance(coordinates, first) -
       haversineDistance(coordinates, second),
   );
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredHospitals = normalizedQuery
+    ? nearby.filter((hospital) =>
+        [hospital.name, hospital.address].some((value) =>
+          value.toLowerCase().includes(normalizedQuery),
+        ),
+      )
+    : nearby;
 
   return (
     <section className="feed-section" aria-labelledby="emergency-title">
@@ -139,8 +162,18 @@ export function EmergencyFeed({
       {!loading && hospitals.length === 0 && !error && (
         <div className="feed-empty">No verified hospitals are listed yet.</div>
       )}
+      <label className="search-field">
+        <Search size={18} aria-hidden="true" />
+        <span className="sr-only">Search hospitals by name or area</span>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search hospitals or area"
+        />
+      </label>
       <div className="hospital-feed">
-        {nearby.map((hospital) => {
+        {filteredHospitals.map((hospital) => {
           const updatedAt = lastUpdated(hospital);
           const status = freshness(updatedAt, now);
           const totals = bedTotals(hospital);
@@ -160,22 +193,34 @@ export function EmergencyFeed({
                   <MapPin size={14} aria-hidden="true" />
                   {hospital.address}
                 </span>
-                <span className="hospital-distance">
-                  {Number.isFinite(distance) ? `${distance.toFixed(1)} km away` : 'Distance unavailable'}
+                <span className="hospital-subheading">
+                  <span className="hospital-distance">
+                    {Number.isFinite(distance) ? `${distance.toFixed(1)} km away` : 'Distance unavailable'}
+                  </span>
+                  <span className={`freshness freshness-${status}`}>
+                    {freshnessLabel(updatedAt, now)}
+                  </span>
                 </span>
-                <span className="bed-summary">
-                  <span><b>{totals.icu}</b> ICU beds</span>
-                  <span><b>{totals.general}</b> general beds</span>
+                <span className="bed-summary" aria-label="Bed availability">
+                  {([
+                    ['ICU', totals.icu],
+                    ['General', totals.general],
+                    ['Cabin', totals.cabin],
+                  ] as const).map(([label, count]) => (
+                    <span className={bedStatusClass(count)} key={label}>
+                      {label}: <b>{bedLabel(count)}</b>
+                    </span>
+                  ))}
+                </span>
+                <span className="card-cta">
+                  View Beds &amp; Call
+                  <ArrowRight size={16} aria-hidden="true" />
                 </span>
               </button>
               <div className="hospital-card-footer">
-                <span className={`freshness freshness-${status}`}>
-                  <Clock3 size={13} aria-hidden="true" />
-                  {freshnessLabel(updatedAt, now)}
-                </span>
                 <a className="call-link" href={`tel:${hospital.hotlinePhone}`}>
                   <Phone size={15} aria-hidden="true" />
-                  Call
+                  Call Reception
                 </a>
               </div>
               {status === 'stale' && (
@@ -184,6 +229,9 @@ export function EmergencyFeed({
             </article>
           );
         })}
+        {!loading && hospitals.length > 0 && filteredHospitals.length === 0 && (
+          <div className="feed-empty">No hospitals match your search.</div>
+        )}
       </div>
     </section>
   );

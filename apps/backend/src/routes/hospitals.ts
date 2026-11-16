@@ -327,6 +327,10 @@ router.get(
       typeof request.query.limit === 'string'
         ? Number(request.query.limit)
         : 25;
+    const requestedOffset =
+      typeof request.query.offset === 'string'
+        ? Number(request.query.offset)
+        : 0;
     if (
       !Number.isInteger(requestedLimit) ||
       requestedLimit < 1 ||
@@ -334,13 +338,17 @@ router.get(
     ) {
       throw new HttpError('limit must be an integer between 1 and 100.', 400);
     }
+    if (!Number.isSafeInteger(requestedOffset) || requestedOffset < 0) {
+      throw new HttpError('offset must be a non-negative integer.', 400);
+    }
 
     const result = await db
       .select()
       .from(auditLogs)
       .where(eq(auditLogs.hospitalId, hospitalId))
-      .orderBy(desc(auditLogs.createdAt))
-      .limit(requestedLimit);
+      .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+      .limit(requestedLimit)
+      .offset(requestedOffset);
     response.json({ success: true, data: result });
   },
 );

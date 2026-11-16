@@ -59,25 +59,22 @@ The default public API origin is `http://localhost:5000/api`. Override it in cli
 
 This repository is organized around a small set of linked guides:
 
-- [docs/README.md](./docs/README.md) — documentation index and map
-- [docs/architecture.md](./docs/architecture.md) — monorepo architecture, API contracts, and environment model
-- [apps/backend/README.md](./apps/backend/README.md) — backend setup, auth, routes, and storage
-- [apps/hospital-web/README.md](./apps/hospital-web/README.md) — hospital operations workflow and demo credentials
-- [apps/master-admin/README.md](./apps/master-admin/README.md) — verification workflow and admin dashboard
-- [apps/user-pwa/README.md](./apps/user-pwa/README.md) — patient-facing emergency app and offline behavior
+- [docs/README.md] — documentation index and map
+- [docs/architecture.md] — monorepo architecture, API contracts, and environment model
+- [apps/backend/README.md] — backend setup, auth, routes, and storage
+- [apps/hospital-web/README.md] — hospital operations workflow and demo credentials
+- [apps/master-admin/README.md] — verification workflow and admin dashboard
+- [apps/user-pwa/README.md] — patient-facing emergency app and offline behavior
 
-## Build and validation
-
+## Build
 Run the complete workspace build with:
 
 ```sh
 pnpm build
 ```
-
+## Validation
 For type checking across the monorepo:
 
 ```sh
 pnpm check-types
 ```
-
-For additional operational detail, including database migration notes, Supabase Storage rules, and security boundaries, see the architecture guide.

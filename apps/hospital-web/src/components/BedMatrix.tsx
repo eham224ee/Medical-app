@@ -13,7 +13,7 @@ interface BedMatrixProps {
 
 const statusCopy: Record<BedStatus, string> = {
   HIGH_AVAILABILITY: 'Available',
-  LIMITED: 'Limited',
+  LIMITED: 'High demand',
   FULL: 'Full',
   UNVERIFIED: 'Unverified',
 };
@@ -21,8 +21,12 @@ const statusCopy: Record<BedStatus, string> = {
 function statusFor(bed: BedInventory): BedStatus {
   if (bed.statusCode === 'UNVERIFIED') return 'UNVERIFIED';
   if (bed.availableCount === 0) return 'FULL';
-  if (bed.availableCount / Math.max(bed.totalCount, 1) <= 0.2) return 'LIMITED';
+  if (bed.availableCount <= 5) return 'LIMITED';
   return 'HIGH_AVAILABILITY';
+}
+
+function holdControls() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, 1500));
 }
 
 function formatUpdated(value: string) {
@@ -52,7 +56,7 @@ export function BedMatrix({ beds, isLoading, onAdjust }: BedMatrixProps) {
   ) {
     setPendingIds((current) => new Set(current).add(bed.id));
     try {
-      await onAdjust(bed.id, operation);
+      await Promise.all([onAdjust(bed.id, operation), holdControls()]);
     } finally {
       setPendingIds((current) => {
         const next = new Set(current);
@@ -142,10 +146,10 @@ export function BedMatrix({ beds, isLoading, onAdjust }: BedMatrixProps) {
 
                       <div className="bed-counter">
                         <span className="counter-value" aria-live="polite">
-                          {bed.availableCount}
+                          {String(bed.availableCount).padStart(2, '0')}
                         </span>
                         <span className="counter-total">
-                          / {bed.totalCount} beds free
+                          / {bed.totalCount} total
                         </span>
                       </div>
 

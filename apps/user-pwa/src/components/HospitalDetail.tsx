@@ -73,7 +73,15 @@ export function HospitalDetail({ hospitalId, onClose }: HospitalDetailProps) {
                       <strong>{bed.category}</strong>
                       <span>{bed.department}</span>
                     </div>
-                    <b className={bed.availableCount > 0 ? 'bed-count available' : 'bed-count'}>
+                    <b
+                      className={
+                        bed.availableCount === 0
+                          ? 'bed-count'
+                          : bed.availableCount <= 5
+                            ? 'bed-count high-demand'
+                            : 'bed-count available'
+                      }
+                    >
                       {bed.availableCount}
                       <small> / {bed.totalCount}</small>
                     </b>

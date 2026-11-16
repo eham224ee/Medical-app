@@ -21,8 +21,8 @@ function ProfileView({
 }) {
   return (
     <section className="profile-page" aria-labelledby="profile-title">
-      <div className="eyebrow">APP SETTINGS</div>
-      <h1 id="profile-title">Settings</h1>
+      <div className="eyebrow">YOUR PROFILE</div>
+      <h1 id="profile-title">Profile</h1>
       <div className="profile-card">
         <div className="profile-row">
           <span>Privacy</span>

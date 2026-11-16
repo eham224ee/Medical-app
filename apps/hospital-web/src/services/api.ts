@@ -144,9 +144,14 @@ export const hospitalApi = {
       { method: 'POST', session, body: doctor },
     );
   },
-  getAuditLogs(hospitalId: string, session: HospitalPanelSession) {
+  getAuditLogs(
+    hospitalId: string,
+    session: HospitalPanelSession,
+    limit = 25,
+    offset = 0,
+  ) {
     return request<AuditLog[]>(
-      `/hospitals/${encodeURIComponent(hospitalId)}/audit-logs`,
+      `/hospitals/${encodeURIComponent(hospitalId)}/audit-logs?limit=${limit}&offset=${offset}`,
       { session },
     );
   },

@@ -28,7 +28,15 @@ VITE_API_BASE_URL=http://localhost:5000/api pnpm --filter master-admin dev
 
 ## Admin flow
 
-The app signs in through the backend admin session endpoint. Once authenticated, the dashboard shows three main sections:
+Start the backend after setting these values in the ignored `apps/backend/.env` file:
+
+```dotenv
+MASTER_ADMIN_USERNAME=<admin username>
+MASTER_ADMIN_PASSWORD=<unique strong password>
+MASTER_ADMIN_SESSION_SECRET=<random secret of at least 32 characters>
+```
+
+Open the dashboard at `http://localhost:5174/master-medico-admin` and sign in with the configured username and password. The app authenticates through the backend admin session endpoint. Once authenticated, the dashboard shows three main sections:
 
 - Verification queue
 - System audit feed
@@ -42,6 +50,7 @@ Approval and rejection actions update the pending hospital state in a transactio
 - The backend validates the signed session and keeps the secret server-side.
 - The frontend never contains backend credentials or Supabase secrets.
 - The app depends on the backend allowlist and CORS configuration for browser-to-API trust.
+- Keep the admin password in the backend environment, not this README or source control. Rotate it if it has been exposed.
 
 ## Related docs
 
